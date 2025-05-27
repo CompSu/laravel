@@ -13,19 +13,31 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 class AuthController extends Controller
 {
-    public function login(LoginRequest $request)
-    {
-        $credentials = $request->only('username', 'password');
+public function login(LoginRequest $request)
+{
+    $credentials = $request->only('username', 'password');
 
-        if (!Auth::attempt($credentials)) {
-            return response()->json(['message' => 'Invalid credentials'], 401);
-        }
-
-        $user = Auth::user();
-        $token = $user->createToken('auth_token')->plainTextToken;
-
-        return response()->json(new LoginResourceDTO($token), 200);
+    if (!Auth::attempt($credentials)) {
+        return response()->json(['message' => 'Invalid credentials'], 401);
     }
+
+    $user = Auth::user();
+
+    $maxTokens = 2;
+    $tokens = $user->tokens()->orderBy('created_at')->get();
+
+    if ($tokens->count() >= $maxTokens) {
+        $tokensToDelete = $tokens->take($tokens->count() - $maxTokens + 1);
+        foreach ($tokensToDelete as $token) {
+            $token->delete();
+        }
+    }
+
+    $token = $user->createToken('auth_token')->plainTextToken;
+
+    return response()->json(new LoginResourceDTO($token), 200);
+}
+
     public function register(RegisterRequest $request)
     {
         $data = $request->validated();
@@ -62,7 +74,7 @@ class AuthController extends Controller
     public function tokens(Request $request)
     {
         $tokens = $request->user()->tokens()->pluck('name');
-        return response()->json(['tokens' => $tokens]);
+        return response()->json($request->user()->tokens);
     }
     public function logoutAll(Request $request)
     {
